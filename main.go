@@ -65,21 +65,21 @@ func Run(ctx context.Context, client *ethclient.Client) {
 		log.Fatalf("can't get chain head: %s", err.Error())
 	}
 	retryQ := make(chan uint64)
+	// this function retry every failed block request
+	go func(ctx context.Context) {
+		for {
+			select {
+			case b := <-retryQ:
+				go processBlock(client, big.NewInt(int64(b)), retryQ)
+			case <-ctx.Done():
+				return
+			}
+		}
+	}(ctx)
 	// sync withdrawals list from lastSynced to current head block
 	// needs to sync on application start
 	if head.Number.Uint64() != lastSynced {
-		go func(ctx context.Context) {
-			for {
-				select {
-				case b := <-retryQ:
-					go processBlock(client, big.NewInt(int64(b)), retryQ)
-				case <-ctx.Done():
-					return
-				}
-			}
-		}(ctx)
 		syncToHeadParallel(ctx, client, lastSynced, head.Number, retryQ)
-
 	}
 
 	// goroutine that syncs new blocks every minute
