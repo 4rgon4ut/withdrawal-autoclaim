@@ -2,7 +2,10 @@ module github.com/withdrawal-autoclaim
 
 go 1.20
 
-require github.com/ethereum/go-ethereum v1.12.0
+require (
+	github.com/ethereum/go-ethereum v1.12.0
+	github.com/sirupsen/logrus v1.9.3
+)
 
 require (
 	github.com/StackExchange/wmi v0.0.0-20180116203802-5d049714c4a6 // indirect
