@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"math/big"
 	"os"
 	"os/signal"
 	"strconv"
@@ -63,10 +64,22 @@ func Run(ctx context.Context, client *ethclient.Client) {
 	if err != nil {
 		log.Fatalf("can't get chain head: %s", err.Error())
 	}
+	retryQ := make(chan uint64)
 	// sync withdrawals list from lastSynced to current head block
 	// needs to sync on application start
 	if head.Number.Uint64() != lastSynced {
-		syncToHeadParallel(ctx, client, lastSynced, head.Number)
+		go func(ctx context.Context) {
+			for {
+				select {
+				case b := <-retryQ:
+					go processBlock(client, big.NewInt(int64(b)), retryQ)
+				case <-ctx.Done():
+					return
+				}
+			}
+		}(ctx)
+		syncToHeadParallel(ctx, client, lastSynced, head.Number, retryQ)
+
 	}
 
 	// goroutine that syncs new blocks every minute
@@ -79,7 +92,7 @@ func Run(ctx context.Context, client *ethclient.Client) {
 				log.Errorf("can't get head: %s", err.Error())
 				continue
 			}
-			go syncToHeadParallel(ctx, client, lastSynced, head.Number)
+			go syncToHeadParallel(ctx, client, lastSynced, head.Number, retryQ)
 		}
 	}(ctx)
 

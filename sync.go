@@ -14,27 +14,17 @@ var mux sync.Mutex
 var wg sync.WaitGroup
 
 // spread
-func syncToHeadParallel(ctx context.Context, client *ethclient.Client, lastSynced uint64, head *big.Int) {
+func syncToHeadParallel(ctx context.Context, client *ethclient.Client, lastSynced uint64, head *big.Int, retryQ chan uint64) {
 	var threads uint64 = 3
 
 	diff := head.Uint64() - lastSynced
 	portion := diff / threads
-	retryQ := make(chan uint64)
 	for j := 0; j < int(threads); j++ {
 		wg.Add(1)
 		start := lastSynced + uint64(j)*portion
 		go syncPortion(ctx, client, start, start+portion, retryQ)
 	}
-	go func(ctx context.Context) {
-		for {
-			select {
-			case b := <-retryQ:
-				go processBlock(client, big.NewInt(int64(b)), retryQ)
-			case <-ctx.Done():
-				return
-			}
-		}
-	}(ctx)
+
 	wg.Wait()
 }
 
