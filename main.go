@@ -26,6 +26,8 @@ var (
 	PrivateKey string
 
 	withdrawals Withdrawals
+
+	metrics *Metrics
 )
 
 func init() {
@@ -57,6 +59,8 @@ func init() {
 	}
 
 	withdrawals = make(map[common.Address]struct{}, 0)
+
+	metrics = NewMetrics()
 }
 
 func Run(ctx context.Context, client *ethclient.Client) {
@@ -88,7 +92,6 @@ func Run(ctx context.Context, client *ethclient.Client) {
 		for {
 			select {
 			case <-time.Tick(time.Minute * 1):
-				log.Warn("lastSynced: ", lastSynced)
 				head, err := client.HeaderByNumber(ctx, nil)
 				if err != nil || head == nil {
 					log.Errorf("can't get head: %s", err.Error())
@@ -104,7 +107,10 @@ func Run(ctx context.Context, client *ethclient.Client) {
 	// claims collected withdrawals every hour
 	for {
 		select {
-		case <-time.Tick(time.Minute * 60):
+		// FIXME
+		case <-time.Tick(time.Minute * 10):
+			// lock here to prevent races and make interaction with withdrawals list threadsafe
+			// i.e. no other goroutines able to add new withdrawals to the list during claim and flushing
 			mux.Lock()
 			if err := claimBatches(client); err != nil {
 				log.Errorf("can't claim batches: %s", err.Error())
@@ -118,6 +124,8 @@ func Run(ctx context.Context, client *ethclient.Client) {
 				mux.Unlock()
 				continue
 			}
+			//
+			metrics.Commit()
 			mux.Unlock()
 
 		case <-ctx.Done():
@@ -133,6 +141,8 @@ func main() {
 	}
 	// parent context, all goroutines will stop on stop() call
 	ctx, stop := context.WithCancel(context.Background())
+
+	go metrics.serve(ctx)
 	go Run(ctx, client)
 
 	c := make(chan os.Signal, 1)
@@ -140,7 +150,7 @@ func main() {
 	// SIGKILL, SIGQUIT or SIGTERM (Ctrl+/) will not be caught.
 	signal.Notify(c, os.Interrupt)
 
-	// Block until we receive our signal
+	// Block until receive SIGINT (kill -2)
 	<-c
 	stop()
 }

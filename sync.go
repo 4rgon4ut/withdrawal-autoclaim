@@ -41,6 +41,7 @@ func accumulate(client *ethclient.Client, block *types.Block) error {
 	defer mux.Unlock()
 	for _, w := range block.Withdrawals() {
 		withdrawals[w.Address] = struct{}{}
+		metrics.withdrawalsCounter++
 	}
 	if block.Number().Uint64() > lastSynced {
 		lastSynced = block.Number().Uint64()

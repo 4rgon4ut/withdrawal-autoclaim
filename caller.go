@@ -14,6 +14,9 @@ import (
 	"github.com/withdrawal-autoclaim/bindings"
 )
 
+// Calls claim for every batch of withdrawal addresses
+//
+// number of batches == (withdrawal address / BatchSize)
 func claimBatches(client *ethclient.Client) error {
 	withdrawalAddrs := withdrawals.toSlice()
 	batches := len(withdrawalAddrs) / BatchSize
@@ -31,7 +34,7 @@ func claimBatches(client *ethclient.Client) error {
 			return fmt.Errorf("can't claim withdrawals: %w", err)
 		}
 	}
-
+	metrics.addressesCounter = uint64(len(withdrawalAddrs))
 	return nil
 }
 
@@ -52,7 +55,10 @@ func claim(client *ethclient.Client, addrs []common.Address) error {
 	log.Infof("sent claim tx hash: %s", tx.Hash())
 	r, err := bind.WaitMined(context.Background(), client, tx)
 	if err != nil {
-		return fmt.Errorf("can't check if tx mined: %w", err)
+		return fmt.Errorf("can't cant get tx receipt: %w", err)
+	}
+	if r.Status == 0 {
+		log.Errorf("tx reverted: hash %s source: %v", r.TxHash.String(), r)
 	}
 	log.Infof("tx mined on block: %d", r.BlockNumber.Uint64())
 	return nil
