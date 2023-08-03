@@ -62,9 +62,7 @@ func processBlock(client *ethclient.Client, blockNum *big.Int, retryQ chan uint6
 		return
 	}
 
-	err = accumulate(client, block)
-
-	if err != nil {
+	if err := accumulate(client, block); err != nil {
 		log.Error("accumulation error: %w", err)
 		retryQ <- blockNum.Uint64()
 	}

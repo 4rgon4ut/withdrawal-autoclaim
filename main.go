@@ -85,33 +85,44 @@ func Run(ctx context.Context, client *ethclient.Client) {
 	// goroutine that syncs new blocks every minute
 	// shares parent context and will stop on parent context cancel function call on main
 	go func(ctx context.Context) {
-		for range time.Tick(time.Minute * 1) {
-			log.Warn("lastSynced: ", lastSynced)
-			head, err := client.HeaderByNumber(ctx, nil)
-			if err != nil || head == nil {
-				log.Errorf("can't get head: %s", err.Error())
-				continue
+		for {
+			select {
+			case <-time.Tick(time.Minute * 1):
+				log.Warn("lastSynced: ", lastSynced)
+				head, err := client.HeaderByNumber(ctx, nil)
+				if err != nil || head == nil {
+					log.Errorf("can't get head: %s", err.Error())
+					continue
+				}
+				syncToHeadParallel(ctx, client, lastSynced, head.Number, retryQ)
+			case <-ctx.Done():
+				return
 			}
-			go syncToHeadParallel(ctx, client, lastSynced, head.Number, retryQ)
 		}
 	}(ctx)
 
 	// claims collected withdrawals every hour
-	for range time.Tick(time.Minute * 60) {
-		mux.Lock()
-		if err := claimBatches(client); err != nil {
-			log.Errorf("can't claim batches: %s", err.Error())
-			mux.Unlock()
-			continue
-		}
-		// flush collected withdrawal accounts list
-		withdrawals = make(map[common.Address]struct{}, 0)
+	for {
+		select {
+		case <-time.Tick(time.Minute * 60):
+			mux.Lock()
+			if err := claimBatches(client); err != nil {
+				log.Errorf("can't claim batches: %s", err.Error())
+				mux.Unlock()
+				continue
+			}
+			// flush collected withdrawal accounts list
+			withdrawals = make(map[common.Address]struct{}, 0)
 
-		if err := writeLastSynced(lastSynced); err != nil {
+			if err := writeLastSynced(lastSynced); err != nil {
+				mux.Unlock()
+				continue
+			}
 			mux.Unlock()
-			continue
+
+		case <-ctx.Done():
+			return
 		}
-		mux.Unlock()
 	}
 }
 
