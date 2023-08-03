@@ -74,6 +74,7 @@ func Run(ctx context.Context, client *ethclient.Client) {
 		for {
 			select {
 			case b := <-retryQ:
+				metrics.rpcErrors.Add(float64(1))
 				go processBlock(client, big.NewInt(int64(b)), retryQ)
 			case <-ctx.Done():
 				return

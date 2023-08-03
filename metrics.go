@@ -17,6 +17,8 @@ type Metrics struct {
 	withdrawalAddresses prometheus.Gauge
 	addressesCounter    uint64
 
+	rpcErrors prometheus.Gauge
+
 	registry *prometheus.Registry
 }
 
@@ -33,8 +35,13 @@ func NewMetrics() *Metrics {
 			Name:      "withdrawal_addresses",
 			Help:      "Number of unique withdrawal addresess processed on the last claim.",
 		}),
+		rpcErrors: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: "autoclaimer",
+			Name:      "gnosis_rpc_errors",
+			Help:      "Number of bad responses from public execution layer RPC.",
+		}),
 	}
-	reg.MustRegister(m.withdrawalsClaimed, m.withdrawalAddresses)
+	reg.MustRegister(m.withdrawalsClaimed, m.withdrawalAddresses, m.rpcErrors)
 	m.registry = reg
 	return m
 }
@@ -49,7 +56,7 @@ func (m *Metrics) Commit() {
 
 func (m *Metrics) serve(ctx context.Context) {
 	promHandler := promhttp.HandlerFor(m.registry, promhttp.HandlerOpts{})
-	server := &http.Server{Addr: ":9090", Handler: promHandler}
+	server := &http.Server{Addr: ":8888", Handler: promHandler}
 
 	go func() {
 		if err := server.ListenAndServe(); err != nil {
