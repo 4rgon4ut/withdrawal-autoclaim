@@ -109,7 +109,7 @@ func Run(ctx context.Context, client *ethclient.Client) {
 	for {
 		select {
 		// FIXME
-		case <-time.Tick(time.Minute * 10):
+		case <-time.Tick(24 * time.Hour):
 			// lock here to prevent races and make interaction with withdrawals list threadsafe
 			// i.e. no other goroutines able to add new withdrawals to the list during claim and flushing
 			mux.Lock()
