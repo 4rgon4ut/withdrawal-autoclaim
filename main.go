@@ -52,14 +52,12 @@ func init() {
 	if BatchSize == 0 {
 		BatchSize = 1000
 	}
-
-	lastSynced, err = readLastSynced()
+	lastSynced, err = getLastSynced()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("no last synced block number provided")
 	}
 
 	withdrawals = make(map[common.Address]struct{}, 0)
-
 	metrics = NewMetrics()
 }
 
