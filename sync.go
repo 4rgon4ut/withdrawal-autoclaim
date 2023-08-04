@@ -13,7 +13,8 @@ import (
 var mux sync.Mutex
 var wg sync.WaitGroup
 
-// spread
+// syncToHeadParallel spreads amount of blocks to sync between 3 goroutines.
+// Function wait all spawned goroutines to finish.
 func syncToHeadParallel(ctx context.Context, client *ethclient.Client, lastSynced uint64, head *big.Int, retryQ chan uint64) {
 	var threads uint64 = 3
 
@@ -28,28 +29,18 @@ func syncToHeadParallel(ctx context.Context, client *ethclient.Client, lastSynce
 	wg.Wait()
 }
 
+// syncPortion calls block processing for every block from start to end.
 func syncPortion(ctx context.Context, client *ethclient.Client, start, end uint64, retryQ chan uint64) {
 	defer wg.Done()
+	// TODO: cut logging ?
 	log.Infof("syncing blocks %d --> %d", start, end)
 	for i := start; i <= end; i++ {
 		processBlock(client, big.NewInt(int64(i)), retryQ)
 	}
 }
 
-func accumulate(client *ethclient.Client, block *types.Block) error {
-	mux.Lock()
-	defer mux.Unlock()
-	for _, w := range block.Withdrawals() {
-		withdrawals[w.Address] = struct{}{}
-		metrics.withdrawalsCounter++
-	}
-	if block.Number().Uint64() > lastSynced {
-		lastSynced = block.Number().Uint64()
-	}
-	log.Infof("synced block: %d", block.Number().Uint64())
-	return nil
-}
-
+// processBlock try to get block by number and accumulate withdrawals.
+// If processing fails, block number being pushed to retryQ channel.
 func processBlock(client *ethclient.Client, blockNum *big.Int, retryQ chan uint64) {
 	block, err := client.BlockByNumber(context.Background(), blockNum)
 	if err != nil {
@@ -67,4 +58,20 @@ func processBlock(client *ethclient.Client, blockNum *big.Int, retryQ chan uint6
 		log.Error("accumulation error: %w", err)
 		retryQ <- blockNum.Uint64()
 	}
+}
+
+// accumulates all unique withdrawals addresses and increments lastSynced counter.
+func accumulate(client *ethclient.Client, block *types.Block) error {
+	mux.Lock()
+	defer mux.Unlock()
+	for _, w := range block.Withdrawals() {
+		withdrawals[w.Address] = struct{}{}
+		metrics.withdrawalsCounter++
+	}
+	if block.Number().Uint64() > lastSynced {
+		lastSynced = block.Number().Uint64()
+	}
+	// TODO: cut excess logging ?
+	log.Infof("synced block: %d", block.Number().Uint64())
+	return nil
 }

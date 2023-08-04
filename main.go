@@ -63,6 +63,23 @@ func init() {
 	metrics = NewMetrics()
 }
 
+/*
+Run is the main function of the application, it starts on the application start and runs
+endlessly untill application stops.
+
+Execution may be described in a few steps:
+
+ 1. Retry queue goroutine starts in parallel to retry every failed public RPC calls.
+    Every bad response from public RPC being pushed to retry queue channel to reexecute the call.
+
+ 2. Syncs to the current head from provided <last_synced> block argument (on application start) collecting all withdrawals.
+
+ 3. Additional sync goroutine starts in parallel to sync new blocks every minute.
+
+ 4. Claim loop starts to claim withdrawals batches every <provided_time>.
+
+    Every goroutine shares parent context and will stop onse parent context is canceled.
+*/
 func Run(ctx context.Context, client *ethclient.Client) {
 	head, err := client.HeaderByNumber(ctx, nil)
 	if err != nil {
@@ -108,7 +125,7 @@ func Run(ctx context.Context, client *ethclient.Client) {
 	// claims collected withdrawals every hour
 	for {
 		select {
-		// FIXME
+		// TODO: make time configurable ?
 		case <-time.Tick(24 * time.Hour):
 			// lock here to prevent races and make interaction with withdrawals list threadsafe
 			// i.e. no other goroutines able to add new withdrawals to the list during claim and flushing

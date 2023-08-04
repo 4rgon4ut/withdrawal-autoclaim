@@ -14,9 +14,8 @@ import (
 	"github.com/withdrawal-autoclaim/bindings"
 )
 
-// Calls claim for every batch of withdrawal addresses
-//
-// number of batches == (withdrawal address / BatchSize)
+// claimBatches сalls claim for every batch of withdrawal addresses
+// where number of batches == (withdrawal address / BatchSize).
 func claimBatches(client *ethclient.Client) error {
 	withdrawalAddrs := withdrawals.toSlice()
 	batches := len(withdrawalAddrs) / BatchSize
@@ -34,10 +33,13 @@ func claimBatches(client *ethclient.Client) error {
 			return fmt.Errorf("can't claim withdrawals: %w", err)
 		}
 	}
+	// sets addressesCounter (withdrawalAddresses) metric
+	// to the number of unique withdrawal addresses
 	metrics.addressesCounter = uint64(len(withdrawalAddrs))
 	return nil
 }
 
+// claim send claimWithdrawals tx to deposit contract with provided list of addresses.
 func claim(client *ethclient.Client, addrs []common.Address) error {
 	opts, err := txOpts(client)
 	if err != nil {
@@ -58,12 +60,13 @@ func claim(client *ethclient.Client, addrs []common.Address) error {
 		return fmt.Errorf("can't cant get tx receipt: %w", err)
 	}
 	if r.Status == 0 {
-		log.Errorf("tx reverted: hash %s source: %v", r.TxHash.String(), r)
+		return fmt.Errorf("tx reverted: hash %s source: %v", r.TxHash.String(), r)
 	}
 	log.Infof("tx mined on block: %d", r.BlockNumber.Uint64())
 	return nil
 }
 
+// txOpts creates tx signer from private key and fills tx options.
 func txOpts(client *ethclient.Client) (*bind.TransactOpts, error) {
 	privateKey, err := crypto.HexToECDSA(PrivateKey)
 	if err != nil {
@@ -96,7 +99,7 @@ func txOpts(client *ethclient.Client) (*bind.TransactOpts, error) {
 	}
 	auth.Nonce = big.NewInt(int64(nonce))
 	auth.Value = big.NewInt(0) // in wei
-	auth.GasLimit = uint64(0)  // in units
+	auth.GasLimit = uint64(0)  // estimate
 	auth.GasPrice = gasPrice
 
 	return auth, nil
