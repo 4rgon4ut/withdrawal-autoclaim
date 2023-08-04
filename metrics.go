@@ -17,6 +17,9 @@ type Metrics struct {
 	withdrawalAddresses prometheus.Gauge
 	addressesCounter    uint64
 
+	// Public RPC bad responses
+	rpcErrors prometheus.Gauge
+
 	registry *prometheus.Registry
 }
 
@@ -33,12 +36,19 @@ func NewMetrics() *Metrics {
 			Name:      "withdrawal_addresses",
 			Help:      "Number of unique withdrawal addresess processed on the last claim.",
 		}),
+		rpcErrors: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: "autoclaimer",
+			Name:      "gnosis_rpc_errors",
+			Help:      "Number of bad responses from public execution layer RPC.",
+		}),
 	}
-	reg.MustRegister(m.withdrawalsClaimed, m.withdrawalAddresses)
+	reg.MustRegister(m.withdrawalsClaimed, m.withdrawalAddresses, m.rpcErrors)
 	m.registry = reg
 	return m
 }
 
+// Commit called every time claimBatches executed correctly
+// to update real proccessed values and not rely on intermediate state.
 func (m *Metrics) Commit() {
 	m.withdrawalsClaimed.Add(float64(m.withdrawalsCounter))
 	m.withdrawalsCounter = 0
@@ -47,9 +57,21 @@ func (m *Metrics) Commit() {
 	m.addressesCounter = 0
 }
 
+// wrapHandler needs to nullify rpcErrors metric after prometheus scrapes it.
+// Its necessary to have updated rpcError value every time.
+func (m *Metrics) wrapHandler(h http.Handler) http.Handler {
+	return http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			defer m.rpcErrors.Set(0) // will be executed after promHandler handled the call
+			h.ServeHTTP(w, r)        // call original prom handler
+		},
+	)
+}
+
 func (m *Metrics) serve(ctx context.Context) {
 	promHandler := promhttp.HandlerFor(m.registry, promhttp.HandlerOpts{})
-	server := &http.Server{Addr: ":9090", Handler: promHandler}
+	// TODO: make port configurable?
+	server := &http.Server{Addr: ":8888", Handler: m.wrapHandler(promHandler)}
 
 	go func() {
 		if err := server.ListenAndServe(); err != nil {
