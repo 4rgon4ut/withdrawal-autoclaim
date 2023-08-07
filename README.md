@@ -1,4 +1,7 @@
-### Withdrawal Autoclaim
+> :warning: **Moved to: https://github.com/gnosischain/withdrawal_autoclaim**
+
+## Withdrawal Autoclaim
+
 
 ```sh
 docker build . -t autoclaimer
